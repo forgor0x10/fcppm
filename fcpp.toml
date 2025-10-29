@@ -1,0 +1,4 @@
+[project]
+name = "fcppm"
+description = "fcpp project manager"
+version = "1.0.0"

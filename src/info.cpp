@@ -5,15 +5,17 @@
 
 #include <fcppm/fcppm.hpp>
 
-#include <brief/brief.hpp>
+#include <brief/aliases.hpp>
+#include <brief/io.hpp>
+#include <brief/result.hpp>
 
-namespace fs = std::filesystem;
-
-fn fcppm::info() -> Optional<String> {
-    if (!fs::exists("fcpp.toml")) { return "No fcpp.toml file found"; }
+fn fcppm::info() -> Result<Unit, String> {
+    if (!fs::exists("fcpp.toml")) { return Err(String("No fcpp.toml file found")); }
 
     mut file = std::ifstream("fcpp.toml");
-    if (!file.is_open()) { return "Error opening file fcpp.toml: " + String(std::strerror(errno)); }
+    if (!file.is_open()) {
+        return Err("Error opening file fcpp.toml: " + String(std::strerror(errno)));
+    }
 
     mut file_string_stream = std::stringstream();
     file_string_stream << file.rdbuf();
@@ -40,14 +42,12 @@ fn fcppm::info() -> Optional<String> {
         }
     }
 
-    if (project_name.empty()) { return "Project name absent or empty"; }
-
-    if (project_description.empty()) { return "Project description absent or empty"; }
-
-    if (project_version.empty()) { return "Project version absent or empty"; }
+    if (project_name.empty()) { return Err(String("Project name absent or empty")); }
+    if (project_description.empty()) { return Err(String("Project description absent or empty")); }
+    if (project_version.empty()) { return Err(String("Project version absent or empty")); }
 
     println(project_name, " ", project_version);
     println(project_description);
 
-    return none;
+    return Ok(Unit());
 }

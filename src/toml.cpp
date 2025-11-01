@@ -1,6 +1,6 @@
 #include <fcppm/fcppm.hpp>
 
-#include <brief/brief.hpp>
+#include <brief/aliases.hpp>
 
 namespace {
 fn split_string(const str &string, const str &delim) -> Vec<str> {

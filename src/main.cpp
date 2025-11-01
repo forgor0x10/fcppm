@@ -1,6 +1,8 @@
 #include <fcppm/fcppm.hpp>
 
-#include <brief/brief.hpp>
+#include <brief/aliases.hpp>
+#include <brief/io.hpp>
+#include <brief/result.hpp>
 
 namespace {
 struct CommandHelp {
@@ -46,12 +48,13 @@ fn print_help_for(const Vec<Pair<str, CommandHelp>> &cmds, const str &cmd = "") 
 }
 
 fn run_command(const str &cmd, const Vec<str> &args) -> i32 {
-    if (cmd == "info") {
-        if (let err = fcppm::info(); err.has_value()) {
-            eprintln("\033[31m> Error: \033[0m", err.value());
-            return 1;
-        }
+    let err_lambda = [](const String err) {
+        eprintln("\033[31m> Error: \033[0m", err);
+        return 1;
+    };
 
+    if (cmd == "info") {
+        fcppm::info().unwrap_or_else(err_lambda);
         return 0;
     }
 
@@ -62,35 +65,11 @@ fn run_command(const str &cmd, const Vec<str> &args) -> i32 {
             if (args[i] == "-n" || args[i] == "--name") { name = args[i + 1]; }
         }
 
-        if (let err = fcppm::new_project(name); err.has_value()) {
-            eprintln("\033[31m> Error: \033[0m", err.value());
-            return 1;
-        }
-
-        return 0;
-    }
-
-    if (cmd == "build") {
-        mut skip_tidying = false;
-
-        for (mut i = u64(0); i + 1 < args.size(); ++i) {
-            if (args[i] == "-s" || args[i] == "--skip-tidying") { skip_tidying = true; }
-        }
-
-        if (let err = fcppm::build(skip_tidying); err.has_value()) {
-            eprintln("\033[31m> Error: \033[0m", err.value());
-            return 1;
-        }
-
-        return 0;
+        fcppm::new_project(name).unwrap_or_else(err_lambda);
     }
 
     if (cmd == "clean") {
-        if (let err = fcppm::clean(); err.has_value()) {
-            eprintln("\033[31m> Error: \033[0m", err.value());
-            return 1;
-        }
-
+        fcppm::clean().unwrap_or_else(err_lambda);
         return 0;
     }
 
@@ -99,7 +78,7 @@ fn run_command(const str &cmd, const Vec<str> &args) -> i32 {
 }
 } // namespace
 
-fn main(i32 argc, char *argv[]) -> i32 {
+fn main(i32 argc, char *argv[]) {
     let args = Vec<str>(argv + 1, argv + argc);
     println("\033[30mfcppm " + String(fcppm::version) + "\033[0m");
 

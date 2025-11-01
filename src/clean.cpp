@@ -3,9 +3,11 @@
 
 #include <fcppm/fcppm.hpp>
 
-#include <brief/brief.hpp>
+#include <brief/aliases.hpp>
+#include <brief/io.hpp>
+#include <brief/result.hpp>
 
-fn fcppm::clean() -> Optional<String> {
+fn fcppm::clean() -> Result<Unit, String> {
     let build_path = fs::path("build");
     let target_path = fs::path("target");
 
@@ -13,12 +15,12 @@ fn fcppm::clean() -> Optional<String> {
 
     if (fs::exists(build_path)) {
         cleaned[0] = true;
-        try_fn_opt(fcppm::remove_dir(build_path));
+        etry(fcppm::remove_dir(build_path));
     }
 
     if (fs::exists(target_path)) {
         cleaned[1] = true;
-        try_fn_opt(fcppm::remove_dir(target_path));
+        etry(fcppm::remove_dir(target_path));
     }
 
     if (cleaned[0] || cleaned[1]) {
@@ -28,5 +30,5 @@ fn fcppm::clean() -> Optional<String> {
         println("\033[30m> \033[0mNothing to clean");
     }
 
-    return none;
+    return Ok(Unit());
 }

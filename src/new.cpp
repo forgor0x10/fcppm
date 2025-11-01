@@ -2,10 +2,12 @@
 
 #include <fcppm/fcppm.hpp>
 
-#include <brief/brief.hpp>
+#include <brief/aliases.hpp>
+#include <brief/io.hpp>
+#include <brief/result.hpp>
 
-fn fcppm::new_project(const str &name) -> Optional<String> {
-    if (name.empty()) { return "Project name is absent or empty"; }
+fn fcppm::new_project(const str &name) -> Result<Unit, String> {
+    if (name.empty()) { return Err(String("Project name is absent or empty")); }
 
     constexpr let template_project_format = str("{project}");
 
@@ -60,15 +62,15 @@ fn fcppm::new_project(const str &name) -> Optional<String> {
 
     let project_path = fs::path(name);
 
-    try_fn_opt(fcppm::create_dir(project_path));
-    try_fn_opt(fcppm::create_file(project_path / ".gitignore", gitignore_template));
-    try_fn_opt(fcppm::create_file(project_path / "fcpp.toml", fcpp_toml_template));
-    try_fn_opt(fcppm::create_file(project_path / ".clang-format", clang_format_template));
-    try_fn_opt(fcppm::create_file(project_path / ".clang-tidy", clang_tidy_template));
-    try_fn_opt(fcppm::create_dir(project_path / "src"));
-    try_fn_opt(fcppm::create_file(project_path / "src" / "main.cpp", main_cpp_template));
+    etry(fcppm::create_dir(project_path));
+    etry(fcppm::create_file(project_path / ".gitignore", gitignore_template));
+    etry(fcppm::create_file(project_path / "fcpp.toml", fcpp_toml_template));
+    etry(fcppm::create_file(project_path / ".clang-format", clang_format_template));
+    etry(fcppm::create_file(project_path / ".clang-tidy", clang_tidy_template));
+    etry(fcppm::create_dir(project_path / "src"));
+    etry(fcppm::create_file(project_path / "src" / "main.cpp", main_cpp_template));
 
     println("\033[36m> Success: \033[0mCreated project ", name);
 
-    return none;
+    return Ok(Unit());
 }

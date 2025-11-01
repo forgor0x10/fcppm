@@ -6,12 +6,12 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <variant>
 
-#include <brief/brief.hpp>
+#include <brief/aliases.hpp>
+#include <brief/io.hpp>
+#include <brief/result.hpp>
+
 #include <fcppm/fcppm.hpp>
-
-namespace fs = std::filesystem;
 
 namespace {
 struct CommandTask {
@@ -20,7 +20,7 @@ struct CommandTask {
     const String &file;
 };
 
-fn needs_rebuild(const fs::path &src_path, const fs::path &object_path) -> bool {
+fn needs_rebuild(const fs::Path &src_path, const fs::Path &object_path) -> bool {
     if (!fs::exists(object_path)) { return true; }
 
     let src_time = fs::file_time_type(fs::last_write_time(src_path));
@@ -29,12 +29,12 @@ fn needs_rebuild(const fs::path &src_path, const fs::path &object_path) -> bool 
     return src_time > dst_time;
 }
 
-fn get_project_name() -> Tuple<bool, String> {
-    if (!fs::exists("fcpp.toml")) { return {false, "No fcpp.toml file found"}; }
+fn get_project_name() -> Result<String, String> {
+    if (!fs::exists("fcpp.toml")) { return Err(String("No fcpp.toml file found")); }
 
     mut file = std::ifstream("fcpp.toml");
     if (!file.is_open()) {
-        return {false, "Error opening file fcpp.toml: " + String(std::strerror(errno))};
+        return Err("Error opening file fcpp.toml: " + String(std::strerror(errno)));
     }
 
     mut file_string_stream = std::stringstream();
@@ -52,17 +52,17 @@ fn get_project_name() -> Tuple<bool, String> {
         }
     }
 
-    if (project_name.empty()) { return {false, "Project name absent or empty"}; }
+    if (project_name.empty()) { return Err(String("Project name absent or empty")); }
 
-    return {true, project_name};
+    return Ok(project_name);
 }
 
-fn run_command(const CommandTask &task) -> Optional<String> {
+fn run_command(const CommandTask &task) -> Result<Unit, String> {
     constexpr let buffer_size = i32(128);
     print("\033[30m> \033[0m", task.name, ": ", task.file, "\n");
 
     let pipe = popen(task.command.c_str(), "r");
-    if (pipe == nullptr) { return "Failed to run command: " + task.command; }
+    if (pipe == nullptr) { return Err("Failed to run command: " + task.command); }
 
     mut buffer = Array<char, buffer_size>();
     mut output = String();
@@ -74,26 +74,26 @@ fn run_command(const CommandTask &task) -> Optional<String> {
     if (ret != 0) {
         println();
         eprintln(output);
-        return "Failed: " + task.name + ": " + task.file;
+        return Err("Failed: " + task.name + ": " + task.file);
     }
 
-    return none;
+    return Ok(Unit());
 }
 
-fn collect_source_files(const fs::path &src_dir) -> Variant<String, Vec<String>> {
+fn collect_source_files(const fs::Path &src_dir) -> Result<Vec<String>, String> {
     if (!fs::exists(src_dir) || !fs::is_directory(src_dir)) {
-        return src_dir.string() + " does not exist or is not a directory";
+        return Err(src_dir.string() + " does not exist or is not a directory");
     }
 
     mut files = Vec<String>();
 
-    for (let &entry in fs::directory_iterator(src_dir)) {
+    for (let &entry in fs::DirIter(src_dir)) {
         if (fs::is_regular_file(entry.status())) {
             files.push_back(entry.path().filename().string());
         }
     }
 
-    return files;
+    return Ok(files);
 }
 
 fn object_file_path(const String &src_file) -> String {
@@ -105,26 +105,25 @@ fn object_file_path(const String &src_file) -> String {
     return object_file;
 }
 
-fn tidy_files(const Vec<String> &files, const fs::path &src_dir, const fs::path &build_dir)
-    -> Optional<String> {
+fn tidy_files(const Vec<String> &files, const fs::Path &src_dir, const fs::Path &build_dir)
+    -> Result<Unit, String> {
     for (const auto &file : files) {
         let src_path = src_dir / file;
         let object_path = build_dir / object_file_path(file);
 
         if (!needs_rebuild(src_path, object_path)) { continue; }
 
-        let result = run_command({.command = "clang-tidy --quiet " + src_dir.string() + "/" + file +
-                                             " -- -Iinclude 2>&1",
-                                  .name = "Tidying",
-                                  .file = src_dir.string() + "/" + file});
-        if (result.has_value()) { return result; }
+        etry(run_command({.command = "clang-tidy --quiet " + src_dir.string() + "/" + file +
+                                     " -- -Iinclude -I/usr/local/include 2>&1",
+                          .name = "Tidying",
+                          .file = src_dir.string() + "/" + file}));
     }
 
-    return none;
+    return Ok(Unit());
 }
 
-fn compile_files(const Vec<String> &files, const fs::path &src_dir, const fs::path &build_dir)
-    -> Optional<String> {
+fn compile_files(const Vec<String> &files, const fs::Path &src_dir, const fs::Path &build_dir)
+    -> Result<Unit, String> {
     for (let &file in files) {
         let object_file = String(object_file_path(file));
 
@@ -136,16 +135,15 @@ fn compile_files(const Vec<String> &files, const fs::path &src_dir, const fs::pa
         mut command = String("g++ -Wall -Wextra -Iinclude -c " + src_dir.string() + "/" + file +
                              " -o " + build_dir.string() + "/" + object_file + " 2>&1");
 
-        let result = run_command(
-            {.command = command, .name = "Compiling", .file = src_dir.string() + "/" + file});
-        if (result.has_value()) { return result; }
+        etry(run_command(
+            {.command = command, .name = "Compiling", .file = src_dir.string() + "/" + file}));
     }
 
-    return none;
+    return Ok(Unit());
 }
 
-fn link_project(const Vec<String> &files, const fs::path &build_dir, const fs::path &target_dir,
-                const str &project_name) -> Optional<String> {
+fn link_project(const Vec<String> &files, const fs::Path &build_dir, const fs::Path &target_dir,
+                const str &project_name) -> Result<Unit, String> {
     mut command = String("g++ -Wall -Wextra -Iinclude -o " + target_dir.string() + "/" +
                          String(project_name) + " ");
 
@@ -153,53 +151,39 @@ fn link_project(const Vec<String> &files, const fs::path &build_dir, const fs::p
 
     command += "2>&1";
 
-    let result = run_command({.command = command,
-                              .name = "Linking",
-                              .file = target_dir.string() + "/" + String(project_name)});
-    if (result.has_value()) { return result; }
+    etry(run_command({.command = command,
+                      .name = "Linking",
+                      .file = target_dir.string() + "/" + String(project_name)}));
 
-    return none;
+    return Ok(Unit());
 }
 } // namespace
 
-fn fcppm::build(bool skip_tidying) -> Optional<String> {
-    let src_dir = fs::path("src");
-    let build_dir = fs::path("build");
-    let target_dir = fs::path("target");
+fn fcppm::build(bool skip_tidying) -> Result<Unit, String> {
+    let src_dir = fs::Path("src");
+    let build_dir = fs::Path("build");
+    let target_dir = fs::Path("target");
 
-    mut project_name = String();
+    let project_name = atry(get_project_name());
+    let files = atry(collect_source_files(src_dir));
 
-    if (let err = get_project_name(); std::get<bool>(err)) {
-        project_name = std::get<String>(err);
-    } else {
-        return std::get<String>(err);
-    }
-
-    mut files = Vec<String>();
-
-    if (let err = collect_source_files(src_dir); std::holds_alternative<Vec<String>>(err)) {
-        files = std::get<Vec<String>>(err);
-    } else {
-        return std::get<String>(err);
-    }
-
-    if (!skip_tidying) { try_fn_opt(tidy_files(files, src_dir, build_dir)); }
+    if (!skip_tidying) { etry(tidy_files(files, src_dir, build_dir)); }
 
     if (!fs::exists(build_dir)) {
         println("\033[30m> \033[0mCreating build directory");
-        try_fn_opt(fcppm::create_dir(build_dir));
+        etry(fcppm::create_dir(build_dir));
     }
 
-    try_fn_opt(compile_files(files, src_dir, build_dir));
+    etry(compile_files(files, src_dir, build_dir));
 
     if (!fs::exists(target_dir)) {
         println("\033[30m> \033[0mCreating target directory");
-        try_fn_opt(fcppm::create_dir(target_dir));
+        etry(fcppm::create_dir(target_dir));
     }
 
-    try_fn_opt(link_project(files, build_dir, target_dir, project_name));
+    etry(link_project(files, build_dir, target_dir, project_name));
 
     println("\033[36m> Success: \033[0mBuilt project ", project_name);
 
-    return none;
+    return Ok(Unit());
 }

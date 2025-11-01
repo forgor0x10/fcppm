@@ -1,7 +1,7 @@
-CXX := g++
+CXX := clang++
 CLANG_TIDY := clang-tidy
 CXXFLAGS := -std=c++17 -Wall -Wextra -O2
-CPPFLAGS := -Iinclude
+CPPFLAGS := -Iinclude -I/usr/local/include
 
 SRC_DIR := src
 BUILD_DIR := build
@@ -19,7 +19,7 @@ $(TARGET): $(OBJ)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(BUILD_DIR)
-	$(CLANG_TIDY) $< -- -Iinclude
+	$(CLANG_TIDY) $< -- -Iinclude -I/usr/local/include
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
 clean:
